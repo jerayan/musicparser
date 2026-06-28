@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MusicParser Live Workspace</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>MusicParser Live Workspace</h1>
+      <p>HTML / JS / Python workspace. Edit app.js, save through server.py, then reload.</p>
+    </div>
+    <div class="actions">
+      <button id="saveJsBtn" type="button">Save app.js</button>
+      <button id="reloadPageBtn" type="button">Reload page</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel input-panel">
+      <div class="panel-title">
+        <h2>Input</h2>
+        <button id="runBtn" type="button">Run parser</button>
+      </div>
+      <textarea id="inputText" spellcheck="false">Flute 1
+Oboe 2
+Clarinet in Bb
+Horn in F
+Violin I</textarea>
+    </section>
+
+    <section class="panel editor-panel">
+      <div class="panel-title">
+        <h2>Editable app.js</h2>
+        <span id="saveState" class="state">loaded</span>
+      </div>
+      <textarea id="jsEditor" spellcheck="false"></textarea>
+    </section>
+
+    <section class="panel output-panel">
+      <h2>Output</h2>
+      <pre id="outputBox"></pre>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    const jsEditor = document.getElementById('jsEditor');
+    const inputText = document.getElementById('inputText');
+    const outputBox = document.getElementById('outputBox');
+    const saveState = document.getElementById('saveState');
+
+    async function loadEditableJs() {
+      const response = await fetch('app.js?cacheBust=' + Date.now());
+      jsEditor.value = await response.text();
+      saveState.textContent = 'loaded';
+    }
+
+    function runParser() {
+      try {
+        if (typeof window.parseInput !== 'function') {
+          throw new Error('app.js must define window.parseInput = function(text) { ... }');
+        }
+        const result = window.parseInput(inputText.value);
+        outputBox.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        outputBox.textContent = String(error && error.stack ? error.stack : error);
+      }
+    }
+
+    async function saveEditableJs() {
+      try {
+        const response = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: 'app.js', content: jsEditor.value })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Save failed');
+        saveState.textContent = 'saved; reload page to use new code';
+        outputBox.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        saveState.textContent = 'save failed';
+        outputBox.textContent = 'Save works only when this page is served by server.py.\n\n' + String(error && error.message ? error.message : error);
+      }
+    }
+
+    jsEditor.addEventListener('input', () => { saveState.textContent = 'modified'; });
+    document.getElementById('runBtn').addEventListener('click', runParser);
+    document.getElementById('saveJsBtn').addEventListener('click', saveEditableJs);
+    document.getElementById('reloadPageBtn').addEventListener('click', () => location.reload());
+
+    loadEditableJs().then(runParser);
+  </script>
+</body>
+</html>
